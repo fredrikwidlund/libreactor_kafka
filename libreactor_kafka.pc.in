@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=${prefix}/include
+
+Name: libreactor_kafka
+Description: libreactor kafka module 
+Version: @VERSION@
+Libs: -L${libdir} -lreactor_kafka
+Cflags: -I${includedir} -flto -fuse-linker-plugin
