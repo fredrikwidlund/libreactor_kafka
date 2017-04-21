@@ -22,17 +22,16 @@ static void reactor_kafka_consumer_error(reactor_kafka_consumer *k, const char *
   reactor_user_dispatch(&k->user, REACTOR_KAFKA_CONSUMER_EVENT_ERROR, (void *) reason);
 }
 
-static rd_kafka_conf_t *reactor_kafka_configure(reactor_kafka_consumer *k, char *keys[], char *values[],
-                                                char *error, size_t error_size)
+static rd_kafka_conf_t *reactor_kafka_configure(char *param[], char *error, size_t error_size)
 {
   rd_kafka_conf_t *conf;
   int status, i;
 
   conf = rd_kafka_conf_new();
-  for (i = 0; keys[i]; i ++)
+  for (i = 0; param[i]; i += 2)
     {
-      status = rd_kafka_conf_set(conf, keys[i], values[i], error, error_size);
-      if (status != RD_KAFKA_CONSUMER_CONF_OK)
+      status = rd_kafka_conf_set(conf, param[i], param[i + 1], error, error_size);
+      if (status != RD_KAFKA_CONF_OK)
         {
           rd_kafka_conf_destroy(conf);
           return NULL;
@@ -45,6 +44,7 @@ static rd_kafka_conf_t *reactor_kafka_configure(reactor_kafka_consumer *k, char 
 static void reactor_kafka_consumer_read(reactor_kafka_consumer *k)
 {
   rd_kafka_event_t *event;
+  const rd_kafka_message_t *rkmessage;
 
   while(1)
     {
@@ -54,24 +54,39 @@ static void reactor_kafka_consumer_read(reactor_kafka_consumer *k)
 
       switch (rd_kafka_event_type(event))
         {
-        case RD_KAFKA_EVENT_REBALANCE:
-          printf("rebalance\n");
-          break;
         case RD_KAFKA_EVENT_FETCH:
-          printf("fetch\n");
+        case RD_KAFKA_EVENT_DR:
+          while (1)
+            {
+              rkmessage = rd_kafka_event_message_next(event);
+              if (!rkmessage)
+                break;
+              if (rkmessage->err)
+                {
+                  rd_kafka_event_destroy(event);
+                  reactor_kafka_consumer_error(k, "event error");
+                  return;
+                }
+              else
+                reactor_user_dispatch(&k->user, REACTOR_KAFKA_CONSUMER_EVENT_MESSAGE, (reactor_kafka_message[]) {
+                    (char *) rd_kafka_topic_name(rkmessage->rkt),
+                    rkmessage->offset,
+                    (reactor_memory) {rkmessage->payload, rkmessage->len},
+                    (reactor_memory) {rkmessage->key, rkmessage->key_len}
+                  });
+            }
           break;
         case RD_KAFKA_EVENT_ERROR:
-          printf("error\n");
-          break;
+          reactor_kafka_consumer_error(k, rd_kafka_event_error_string(event));;
+          return;
         default:
-          printf("default\n");
           break;
         }
       rd_kafka_event_destroy(event);
     }
 }
 
-static void reactor_kafka_consumer_event(void *state, int type, void *data)
+static void reactor_kafka_consumer_pipe_event(void *state, int type, void *data)
 {
   reactor_kafka_consumer *k = state;
   struct pollfd *pollfd = data;
@@ -111,12 +126,10 @@ static void reactor_kafka_consumer_connect(reactor_kafka_consumer *k, char *brok
 {
   rd_kafka_conf_t *conf;
   char error[4096];
-  int status, fds[2];
 
-  conf = reactor_kafka_consumer_configure(k, (char *[]) {
+  conf = reactor_kafka_configure((char *[]) {
       "bootstrap.servers", brokers,
-      "compression.codec", "snappy",
-      "group.id", group ? group : "libreactor_kafka_consumer",
+      "group.id", group ? group : "reactor_kafka_consumer",
       "enable.partition.eof", "false",
       NULL}, error, sizeof error);
   if (!conf)
@@ -125,12 +138,23 @@ static void reactor_kafka_consumer_connect(reactor_kafka_consumer *k, char *brok
       return;
     }
 
-  k->kafka = rd_kafka_consumer_new(RD_KAFKA_CONSUMER, conf, error, sizeof error );
+  k->kafka = rd_kafka_new(RD_KAFKA_CONSUMER, conf, error, sizeof error );
   if (!k->kafka)
    {
      reactor_kafka_consumer_error(k, error);
      return;
    }
+
+  k->queue = rd_kafka_queue_get_consumer(k->kafka);
+  if (!k->queue)
+    {
+      reactor_kafka_consumer_error(k, rd_kafka_err2str(rd_kafka_last_error()));
+      return;
+    }
+
+  (void) pipe(k->fd);
+  reactor_core_fd_register(k->fd[0], reactor_kafka_consumer_pipe_event, k, POLLIN);
+  rd_kafka_queue_io_event_enable(k->queue, k->fd[1], ".", 1);
 }
 
 void reactor_kafka_consumer_open(reactor_kafka_consumer *k, reactor_user_callback *callback, void *state,
@@ -156,56 +180,15 @@ void reactor_kafka_consumer_close(reactor_kafka_consumer *k)
 void reactor_kafka_consumer_subscribe(reactor_kafka_consumer *k, char *topic)
 {
   rd_kafka_topic_partition_list_t *topics;
-  rd_kafka_message_t *message;
   int status;
 
   topics = rd_kafka_topic_partition_list_new(1);
   rd_kafka_topic_partition_list_add(topics, topic, -1);
   status = rd_kafka_subscribe(k->kafka, topics);
+  rd_kafka_topic_partition_list_destroy(topics);
   if (status)
     {
       reactor_kafka_consumer_error(k, rd_kafka_err2str(status));
       return;
     }
-  printf("ok xxx\n");
-}
-
-  /*
-
-  pipe(fds);
-  reactor_core_fd_register(fds[0], reactor_kafka_consumer_event, k, POLLIN);
-  rd_kafka_consumer_queue_t *queue = rd_kafka_consumer_queue_get_consumer(k->consumer);
-  rd_kafka_consumer_queue_io_event_enable(queue, fds[1], "1", 1);
-  */
-  //rd_kafka_consumer_queue_destroy(queue);
-  /*
-  message = rd_kafka_consumer_consumer_poll(k->consumer, 1000000);
-  if (!message)
-    {
-      reactor_kafka_consumer_error(k, rd_kafka_consumer_err2str(rd_kafka_consumer_last_error()));
-      return;
-    }
-  
-  if (message->err)
-    {
-      if (message->err == RD_KAFKA_CONSUMER_RESP_ERR__PARTITION_EOF)
-        {
-          fprintf(stderr,
-                  "Consumer reached end of %s [%"PRId32"] "
-                  "message queue at offset %"PRId64"\n",
-                  rd_kafka_consumer_topic_name(message->rkt),
-                  message->partition, message->offset);
-        }
-
-      printf("%% Consume error for topic \"%s\" [%"PRId32"] "
-             "offset %"PRId64": %s\n",
-             message->rkt ? rd_kafka_consumer_topic_name(message->rkt):"",
-             message->partition,
-             message->offset,
-             rd_kafka_consumer_message_errstr(message));
-    }
-  
-  rd_kafka_consumer_message_destroy(message);
-  printf("done\n");
-  */
 }

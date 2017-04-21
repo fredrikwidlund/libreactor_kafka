@@ -11,10 +11,20 @@ enum reactor_kafka_consumer_state
 enum reactor_kafka_consumer_event
 {
   REACTOR_KAFKA_CONSUMER_EVENT_ERROR,
+  REACTOR_KAFKA_CONSUMER_EVENT_MESSAGE,
   REACTOR_KAFKA_CONSUMER_EVENT_CLOSE
 };
 
+typedef struct reactor_kafka_message reactor_kafka_message;
 typedef struct reactor_kafka_consumer reactor_kafka_consumer;
+
+struct reactor_kafka_message
+{
+  char           *topic;
+  size_t          offset;
+  reactor_memory  data;
+  reactor_memory  key;
+};
 
 struct reactor_kafka_consumer
 {
@@ -23,6 +33,7 @@ struct reactor_kafka_consumer
   reactor_user      user;
   rd_kafka_t       *kafka;
   rd_kafka_queue_t *queue;
+  int               fd[2];
 };
 
 void reactor_kafka_consumer_hold(reactor_kafka_consumer *);

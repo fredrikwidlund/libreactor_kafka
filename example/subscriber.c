@@ -13,11 +13,18 @@
 
 void event(void *state, int type, void *data)
 {
-  (void) fprintf(stderr, "%p %d %p\n", state, type, data);
+  reactor_kafka_message *message;
+
+  (void) state;
   switch (type)
     {
-    case REACTOR_KAFKA_EVENT_ERROR:
+    case REACTOR_KAFKA_CONSUMER_EVENT_ERROR:
       (void) fprintf(stderr, "error: %s\n", (char *) data);
+      break;
+    case REACTOR_KAFKA_CONSUMER_EVENT_MESSAGE:
+      message = data;
+      (void) fprintf(stderr, "[message %s %lu]\n%.*s\n", message->topic, message->offset,
+                     (int) message->data.size, message->data.base);
       break;
     }
 }
@@ -32,14 +39,14 @@ void usage()
 
 int main(int argc, char **argv)
 {
-  reactor_kafka k;
+  reactor_kafka_consumer k;
 
   if (argc != 3)
     usage();
 
   reactor_core_construct();
-  reactor_kafka_open(&k, event, &k, argv[1]);
-  reactor_kafka_subscribe(&k, argv[2]);
+  reactor_kafka_consumer_open(&k, event, &k, argv[1], NULL);
+  reactor_kafka_consumer_subscribe(&k, argv[2]);
   reactor_core_run();
   reactor_core_destruct();
 }
