@@ -15,17 +15,7 @@ enum reactor_kafka_consumer_event
   REACTOR_KAFKA_CONSUMER_EVENT_CLOSE
 };
 
-typedef struct reactor_kafka_message reactor_kafka_message;
 typedef struct reactor_kafka_consumer reactor_kafka_consumer;
-
-struct reactor_kafka_message
-{
-  char           *topic;
-  size_t          offset;
-  reactor_memory  data;
-  reactor_memory  key;
-};
-
 struct reactor_kafka_consumer
 {
   size_t            ref;

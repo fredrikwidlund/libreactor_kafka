@@ -8,9 +8,13 @@ LICENSE \
 README.rst
 
 SOURCE_FILES = \
+src/reactor_kafka/reactor_kafka.c \
+src/reactor_kafka/reactor_kafka_producer.c \
 src/reactor_kafka/reactor_kafka_consumer.c
 
 HEADER_FILES = \
+src/reactor_kafka/reactor_kafka.h \
+src/reactor_kafka/reactor_kafka_producer.h \
 src/reactor_kafka/reactor_kafka_consumer.h
 
 AUTOMAKE_OPTIONS = subdir-objects
@@ -29,9 +33,11 @@ pkgconfig_DATA = libreactor_kafka.pc
 ## examples ###
 
 bin_PROGRAMS = \
-example/subscriber
+example/subscriber \
+example/publisher
 
 example_subscriber_LDADD = -lreactor_kafka -lreactor -ldynamic -lrdkafka
+example_publisher_LDADD = -lreactor_kafka -lreactor -ldynamic -lrdkafka
 
 MAINTAINERCLEANFILES = aclocal.m4 config.h.in configure Makefile.in docs/Makefile.in libreactor_kafka-?.?.?.tar.gz
 maintainer-clean-local:; rm -rf autotools m4 libreactor_kafka-?.?.?

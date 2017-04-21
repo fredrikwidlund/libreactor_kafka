@@ -15,30 +15,12 @@
 #include <dynamic.h>
 #include <reactor.h>
 
+#include "reactor_kafka.h"
 #include "reactor_kafka_consumer.h"
 
 static void reactor_kafka_consumer_error(reactor_kafka_consumer *k, const char *reason)
 {
   reactor_user_dispatch(&k->user, REACTOR_KAFKA_CONSUMER_EVENT_ERROR, (void *) reason);
-}
-
-static rd_kafka_conf_t *reactor_kafka_configure(char *param[], char *error, size_t error_size)
-{
-  rd_kafka_conf_t *conf;
-  int status, i;
-
-  conf = rd_kafka_conf_new();
-  for (i = 0; param[i]; i += 2)
-    {
-      status = rd_kafka_conf_set(conf, param[i], param[i + 1], error, error_size);
-      if (status != RD_KAFKA_CONF_OK)
-        {
-          rd_kafka_conf_destroy(conf);
-          return NULL;
-        }
-    }
-
-  return conf;
 }
 
 static void reactor_kafka_consumer_read(reactor_kafka_consumer *k)

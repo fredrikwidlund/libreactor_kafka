@@ -10,6 +10,8 @@
 extern "C" {
 #endif
 
+#include "reactor_kafka/reactor_kafka.h"
+#include "reactor_kafka/reactor_kafka_producer.h"
 #include "reactor_kafka/reactor_kafka_consumer.h"
 
 #ifdef __cplusplus
