@@ -42,6 +42,7 @@ static void reactor_kafka_producer_connect(reactor_kafka_producer *k, char *brok
 
   conf = reactor_kafka_configure((char *[]) {
       "bootstrap.servers", brokers,
+      "log.connection.close", "false",
       NULL}, error, sizeof error);
   if (!conf)
     {
